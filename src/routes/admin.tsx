@@ -17,7 +17,19 @@ export const Route = createFileRoute("/admin")({
 function AdminDashboard() {
   const { user, role, loading } = useAuth();
   const navigate = useNavigate();
-  const [section, setSection] = useState<AdminSection>("dashboard");
+  const [section, setSection] = useState<AdminSection>(() => {
+    if (typeof window !== "undefined") {
+      const stored = window.localStorage.getItem("syncwise_admin_section");
+      if (stored) return stored as AdminSection;
+    }
+    return "dashboard";
+  });
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("syncwise_admin_section", section);
+    }
+  }, [section]);
   const [collapsed, setCollapsed] = useState(false);
 
   // Auto-collapse below 1280

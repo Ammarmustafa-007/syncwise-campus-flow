@@ -1,23 +1,98 @@
 import { useEffect, useMemo, useState } from "react";
-import { Eye, History, X, CheckCircle2, FileText, AlertTriangle } from "lucide-react";
-import { getVersions, setLatestVersion, type VersionRow } from "@/lib/api";
+import { createPortal } from "react-dom";
+import { Eye, History, X, CheckCircle2, FileText, AlertTriangle, Trash2 } from "lucide-react";
+import { getVersions, setLatestVersion, getVersionSections, deleteVersion, getFlaggedSlots, type VersionRow } from "@/lib/api";
 import SkeletonLoader from "./SkeletonLoader";
 import { formatPKT } from "@/lib/format";
+
+function groupSections(sections: string[]) {
+  const groups: Record<string, string[]> = {};
+  sections.forEach((s) => {
+    const match = s.trim().match(/^([a-zA-Z\-\s]*?)(\d+)([a-zA-Z]+)$/);
+    if (match) {
+      const prefix = match[1].replace(/[-\s]+$/, "");
+      const sem = match[2];
+      const sec = match[3];
+      const key = prefix ? `Semester ${sem} (${prefix})` : `Semester ${sem}`;
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(sec);
+    } else {
+      const key = "Other Sections";
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(s.trim());
+    }
+  });
+
+  const sortedKeys = Object.keys(groups).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  const sortedGroups: Record<string, string[]> = {};
+  sortedKeys.forEach((k) => {
+    sortedGroups[k] = groups[k].sort();
+  });
+  return sortedGroups;
+}
 
 export default function VersionHistory() {
   const [rows, setRows] = useState<VersionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<VersionRow | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<{ id: string, label: string } | null>(null);
+  const [drawerSections, setDrawerSections] = useState<string[]>([]);
+  const [sectionsCache, setSectionsCache] = useState<Record<string, string[]>>({});
   const [deptFilter, setDeptFilter] = useState("");
   const [semSearch, setSemSearch] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
+  const [flaggedSlots, setFlaggedSlots] = useState<any[]>([]);
+  const [flaggedSlotsCache, setFlaggedSlotsCache] = useState<Record<string, any[]>>({});
 
   const load = () => {
     setLoading(true);
     getVersions().then(setRows).catch((e) => setError(e.message)).finally(() => setLoading(false));
   };
   useEffect(load, []);
+
+  const handleOpen = async (r: VersionRow) => {
+    setOpen(r);
+    
+    if (sectionsCache[r.id]) {
+      setDrawerSections(sectionsCache[r.id]);
+      
+      if (r.needs_review_count > 0) {
+        if (flaggedSlotsCache[r.id]) {
+          setFlaggedSlots(flaggedSlotsCache[r.id]);
+        } else {
+          getFlaggedSlots(r.id).then(flagged => {
+            setFlaggedSlotsCache(prev => ({ ...prev, [r.id]: flagged }));
+            setFlaggedSlots(flagged);
+          });
+        }
+      } else {
+        setFlaggedSlots([]);
+      }
+      return;
+    }
+    
+    setDrawerSections([]);
+    setFlaggedSlots([]);
+    
+    try {
+      const sections = await getVersionSections(r.id);
+      setSectionsCache(prev => ({ ...prev, [r.id]: sections }));
+      setDrawerSections(sections);
+      
+      if (r.needs_review_count > 0) {
+        if (flaggedSlotsCache[r.id]) {
+          setFlaggedSlots(flaggedSlotsCache[r.id]);
+        } else {
+          const flagged = await getFlaggedSlots(r.id);
+          setFlaggedSlotsCache(prev => ({ ...prev, [r.id]: flagged }));
+          setFlaggedSlots(flagged);
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   const departments = useMemo(() => Array.from(new Set(rows.map((r) => r.department.name))), [rows]);
   const filtered = useMemo(() => rows.filter((r) =>
@@ -27,7 +102,21 @@ export default function VersionHistory() {
 
   const promote = async (id: string) => {
     setBusy(id);
-    try { await setLatestVersion(id); load(); } finally { setBusy(null); }
+    try { await setLatestVersion(id); load(); } catch (e: any) { setError(e.message); } finally { setBusy(null); }
+  };
+
+  const executeDelete = async (id: string) => {
+    setBusy(id);
+    try {
+      await deleteVersion(id);
+      if (open?.id === id) setOpen(null);
+      setConfirmDelete(null);
+      load();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(null);
+    }
   };
 
   return (
@@ -60,8 +149,8 @@ export default function VersionHistory() {
             <table className="w-full text-sm">
               <thead className="bg-muted/50 text-left text-xs uppercase tracking-wider text-muted-foreground">
                 <tr>
-                  <Th>University</Th><Th>Department</Th><Th>Semester</Th><Th>Version</Th>
-                  <Th>Uploader</Th><Th>Uploaded</Th><Th className="text-right">Slots</Th><Th>Sections</Th><Th>Status</Th><Th className="text-right">Actions</Th>
+                  <Th>University</Th><Th>Department</Th><Th>Term Label</Th><Th>Version</Th>
+                  <Th>Uploader</Th><Th>Uploaded</Th><Th>Status</Th><Th className="text-right">Actions</Th>
                 </tr>
               </thead>
               <tbody>
@@ -73,8 +162,6 @@ export default function VersionHistory() {
                     <Td><span className="rounded-md bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">{r.version_label}</span></Td>
                     <Td className="text-muted-foreground">{r.uploader_name}</Td>
                     <Td className="whitespace-nowrap text-muted-foreground">{formatPKT(r.uploaded_at)}</Td>
-                    <Td className="text-right tabular-nums font-medium">{r.slots_count}</Td>
-                    <Td className="tabular-nums text-muted-foreground">{r.sections_found.length}</Td>
                     <Td>
                       {r.is_latest ? (
                         <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-400">
@@ -90,8 +177,11 @@ export default function VersionHistory() {
                           {busy === r.id ? "Setting…" : "Set as Latest"}
                         </button>
                       )}
-                      <button onClick={() => setOpen(r)} className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground" title="View details">
+                      <button onClick={() => handleOpen(r)} className="mr-1 rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground" title="View details">
                         <Eye className="h-4 w-4" />
+                      </button>
+                      <button onClick={() => setConfirmDelete({ id: r.id, label: r.semester_label })} disabled={busy === r.id} className="rounded-md p-1.5 text-destructive/70 hover:bg-destructive/10 hover:text-destructive disabled:opacity-50" title="Delete version">
+                        <Trash2 className="h-4 w-4" />
                       </button>
                     </Td>
                   </tr>
@@ -103,10 +193,10 @@ export default function VersionHistory() {
       </div>
 
       {/* Drawer */}
-      {open && (
+      {open && typeof document !== "undefined" && createPortal(
         <>
-          <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm animate-fade-in-up" onClick={() => setOpen(null)} />
-          <aside className="fixed inset-y-0 right-0 z-50 w-96 max-w-full overflow-y-auto border-l bg-card p-5 shadow-2xl animate-fade-in-up">
+          <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm transition-all" onClick={() => setOpen(null)} />
+          <aside className="fixed inset-y-0 right-0 z-[110] w-96 max-w-full overflow-y-auto border-l bg-card p-5 shadow-2xl animate-fade-in-up">
             <div className="mb-4 flex items-start justify-between">
               <div>
                 <h3 className="text-lg font-semibold">Version details</h3>
@@ -116,30 +206,102 @@ export default function VersionHistory() {
             </div>
             <dl className="space-y-3 text-sm">
               <Row label="Department">{open.department.name} ({open.department.code})</Row>
-              <Row label="Semester">{open.semester_label}</Row>
+              <Row label="Term Label">{open.semester_label}</Row>
               <Row label="Version">{open.version_label}</Row>
               <Row label="Uploader">{open.uploader_name}</Row>
               <Row label="Uploaded at">{formatPKT(open.uploaded_at)} PKT</Row>
-              <Row label="Slots count">{open.slots_count}</Row>
+              <Row label="Total Semesters">{drawerSections.length === 0 ? "..." : Object.keys(groupSections(drawerSections)).length}</Row>
               <Row label="Status">
                 {open.is_latest ? <span className="text-emerald-400 font-medium">Latest</span> : <span className="text-muted-foreground">Archived</span>}
               </Row>
             </dl>
             {open.needs_review_count > 0 && (
-              <div className="mt-4 flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-300">
-                <AlertTriangle className="h-4 w-4" /> {open.needs_review_count} slots flagged for review
+              <div className="mt-4 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-300">
+                <div className="flex items-center gap-2 mb-3 font-semibold">
+                  <AlertTriangle className="h-4 w-4" />
+                  {open.needs_review_count} slots flagged for review
+                </div>
+                <div className="space-y-2">
+                  {flaggedSlots.length === 0 ? (
+                    <span className="text-xs text-amber-300/70 italic">Loading slots...</span>
+                  ) : (
+                    flaggedSlots.map((slot: any, i: number) => (
+                      <div key={i} className="bg-black/20 p-3 rounded border border-amber-500/20 text-xs flex flex-col gap-1">
+                        <div className="flex justify-between items-start gap-4">
+                          <span className="font-semibold text-amber-200">{slot.subject || "Unknown Subject"}</span>
+                          <span className="shrink-0 text-amber-400/80">{slot.day} {slot.start_time}-{slot.end_time}</span>
+                        </div>
+                        <div className="text-amber-200/70">
+                          Section: {slot.section || "?"} | Teacher: {slot.teacher || "?"} | Room: {slot.room || "?"}
+                        </div>
+                        <div className="mt-1 font-mono text-[10px] bg-black/40 p-1.5 rounded text-amber-100/60 overflow-x-auto whitespace-pre">
+                          {slot.raw_cell_text}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
             )}
             <div className="mt-5">
-              <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">Sections found</p>
-              <div className="flex flex-wrap gap-1.5">
-                {open.sections_found.map((s) => (
-                  <span key={s} className="rounded-full border border-primary/30 bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary">{s}</span>
-                ))}
-              </div>
+              <p className="mb-4 text-xs font-medium uppercase tracking-wider text-muted-foreground">Sections found</p>
+              {drawerSections.length === 0 ? (
+                <span className="text-xs text-muted-foreground italic">Loading sections...</span>
+              ) : (
+                <div className="flex flex-col gap-4">
+                  {Object.entries(groupSections(drawerSections)).map(([groupName, secs]) => (
+                    <div key={groupName}>
+                      <span className="mb-2 block text-xs font-semibold text-foreground/80">{groupName}</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {secs.map((s) => (
+                          <span key={s} className="rounded-full border border-primary/30 bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary">
+                            {s}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </aside>
-        </>
+        </>,
+        document.body
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {confirmDelete && typeof document !== "undefined" && createPortal(
+        <>
+          <div className="fixed inset-0 z-[120] bg-black/60 backdrop-blur-sm transition-all animate-fade-in" onClick={() => setConfirmDelete(null)} />
+          <div className="fixed left-1/2 top-1/2 z-[130] w-full max-w-md -translate-x-1/2 -translate-y-1/2 scale-100 rounded-xl border border-destructive/20 bg-card p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <div className="mb-5 flex items-center gap-3 text-destructive">
+              <div className="rounded-full bg-destructive/10 p-2">
+                <AlertTriangle className="h-6 w-6" />
+              </div>
+              <h3 className="text-xl font-bold">Delete Timetable?</h3>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Are you absolutely sure you want to delete the version <strong className="text-foreground">"{confirmDelete.label}"</strong>? This will permanently erase all associated slots and sections. This action cannot be undone.
+            </p>
+            <div className="mt-8 flex justify-end gap-3">
+              <button
+                onClick={() => setConfirmDelete(null)}
+                disabled={busy === confirmDelete.id}
+                className="rounded-lg border px-4 py-2 text-sm font-medium hover:bg-accent disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => executeDelete(confirmDelete.id)}
+                disabled={busy === confirmDelete.id}
+                className="rounded-lg bg-destructive px-4 py-2 text-sm font-medium text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50"
+              >
+                {busy === confirmDelete.id ? "Deleting..." : "Yes, Delete"}
+              </button>
+            </div>
+          </div>
+        </>,
+        document.body
       )}
     </div>
   );

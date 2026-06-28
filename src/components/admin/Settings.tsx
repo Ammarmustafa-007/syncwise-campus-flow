@@ -22,7 +22,8 @@ export default function Settings() {
   useEffect(() => {
     getUniversities().then((u) => {
       setUnis(u);
-      setSelectedUni(user?.university_id ?? u[0]?.id ?? "");
+      const matched = u.find(x => x.id === user?.university_id);
+      setSelectedUni(matched?.id ?? u[0]?.id ?? "");
     });
   }, [user?.university_id]);
 

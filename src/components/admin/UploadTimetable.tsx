@@ -3,6 +3,7 @@ import { Upload, FileText, X, CheckCircle2, AlertTriangle, Info, Loader2 } from 
 import { getDepartments, getUniversities, uploadTimetable, type Department, type University, type UploadResult } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { formatBytes, formatPKT } from "@/lib/format";
+import { CustomSelect } from "@/components/ui/CustomSelect";
 
 export default function UploadTimetable() {
   const { user } = useAuth();
@@ -100,19 +101,24 @@ export default function UploadTimetable() {
           <h2 className="font-semibold">Select university and department</h2>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
-          <div>
+          <div className="relative z-30">
             <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground">University *</label>
-            <select className={inputCls} value={universityId} onChange={(e) => setUniversityId(e.target.value)}>
-              <option value="">Choose a university…</option>
-              {unis.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-            </select>
+            <CustomSelect 
+              value={universityId} 
+              onChange={(val) => setUniversityId(String(val))}
+              placeholder="Choose a university…"
+              options={unis.map((u) => ({ label: u.name, value: u.id }))}
+            />
           </div>
-          <div>
+          <div className="relative z-20">
             <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground">Department *</label>
-            <select className={inputCls} value={departmentId} onChange={(e) => setDepartmentId(e.target.value)} disabled={!universityId}>
-              <option value="">{universityId ? "Choose a department…" : "Select university first"}</option>
-              {deps.map((d) => <option key={d.id} value={d.id}>{d.name} ({d.code})</option>)}
-            </select>
+            <CustomSelect 
+              value={departmentId} 
+              onChange={(val) => setDepartmentId(String(val))}
+              placeholder={universityId ? "Choose a department…" : "Select university first"}
+              disabled={!universityId}
+              options={deps.map((d) => ({ label: `${d.name} (${d.code})`, value: d.id }))}
+            />
           </div>
         </div>
       </section>
@@ -189,7 +195,7 @@ export default function UploadTimetable() {
               type="button"
               onClick={handleSubmit}
               disabled={!canSubmit}
-              className="inline-flex items-center gap-2 rounded-lg bg-gradient-brand px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-brand transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-lg bg-gradient-brand px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-brand transition-all hover:opacity-95 hover:scale-105 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
             >
               {submitting ? (<><Loader2 className="h-4 w-4 animate-spin" /> Parsing timetable… ~60s</>) : (<><Upload className="h-4 w-4" /> Upload & Parse</>)}
             </button>
@@ -245,9 +251,27 @@ export default function UploadTimetable() {
             </div>
           </div>
           {successResult.needs_review_count > 0 && (
-            <div className="m-5 mt-0 flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
-              <AlertTriangle className="h-4 w-4" />
-              {successResult.needs_review_count} slots flagged for review — check parser output.
+            <div className="m-5 mt-0 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-300">
+              <div className="flex items-center gap-2 mb-3 font-semibold">
+                <AlertTriangle className="h-4 w-4" />
+                {successResult.needs_review_count} slots flagged for review
+              </div>
+              <div className="max-h-60 overflow-y-auto space-y-2 pr-2">
+                {successResult.needs_review_slots?.map((slot: any, i: number) => (
+                  <div key={i} className="bg-black/20 p-3 rounded border border-amber-500/20 text-xs flex flex-col gap-1">
+                    <div className="flex justify-between items-start gap-4">
+                      <span className="font-semibold text-amber-200">{slot.subject || "Unknown Subject"}</span>
+                      <span className="shrink-0 text-amber-400/80">{slot.day} {slot.start_time}-{slot.end_time}</span>
+                    </div>
+                    <div className="text-amber-200/70">
+                      Section: {slot.section || "?"} | Teacher: {slot.teacher || "?"} | Room: {slot.room || "?"}
+                    </div>
+                    <div className="mt-1 font-mono text-[10px] bg-black/40 p-1.5 rounded text-amber-100/60 overflow-x-auto whitespace-pre">
+                      {slot.raw_cell_text}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </section>

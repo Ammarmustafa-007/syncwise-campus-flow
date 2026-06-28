@@ -73,7 +73,7 @@ function LoginPage() {
         </form>
 
         <div className="mt-6 rounded-lg border border-dashed border-primary/30 bg-primary/5 p-3 text-xs text-muted-foreground">
-          <p className="font-medium text-foreground">Demo credentials</p>
+          <p className="font-medium text-foreground">Super admin</p>
           <p className="mt-0.5">admin@syncwise.com · <code className="text-primary">SWadmin007</code></p>
         </div>
 
