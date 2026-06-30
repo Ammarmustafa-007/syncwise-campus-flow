@@ -109,7 +109,7 @@ export default function UsersTable() {
                       {u.pro_request_status === 'pending' && (
                         <button 
                           onClick={() => {
-                            updateUser(u.id, { plan: 'pro', pro_request_status: 'none' })
+                            updateUser(u.id, { plan: 'pro', pro_request_status: 'approved' })
                               .then((updated) => setRows(rs => rs.map(r => r.id === updated.id ? updated : r)))
                               .catch(() => alert("Failed to approve user"));
                           }} 
