@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Eye, Search, ChevronLeft, ChevronRight, Users as UsersIcon } from "lucide-react";
-import { getUsers, type AdminUser } from "@/lib/api";
+import { Eye, Search, ChevronLeft, ChevronRight, Users as UsersIcon, CheckCircle } from "lucide-react";
+import { getUsers, updateUser, type AdminUser } from "@/lib/api";
 import SkeletonLoader from "./SkeletonLoader";
 import UserDetailModal, { PlanBadge, RoleBadge } from "./UserDetailModal";
 import { formatPKT } from "@/lib/format";
@@ -83,6 +83,7 @@ export default function UsersTable() {
                   <th className="px-4 py-3 font-medium">Email</th>
                   <th className="px-4 py-3 font-medium">Role</th>
                   <th className="px-4 py-3 font-medium">Plan</th>
+                  <th className="px-4 py-3 font-medium">Pro Request</th>
                   <th className="px-4 py-3 font-medium">Joined</th>
                   <th className="px-4 py-3 text-right font-medium">Actions</th>
                 </tr>
@@ -94,8 +95,30 @@ export default function UsersTable() {
                     <td className="px-4 py-3 text-muted-foreground">{u.email}</td>
                     <td className="px-4 py-3"><RoleBadge role={u.role} /></td>
                     <td className="px-4 py-3"><PlanBadge plan={u.plan} /></td>
+                    <td className="px-4 py-3">
+                      {u.pro_request_status === 'pending' ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-yellow-500/10 px-2 py-0.5 text-xs font-medium text-yellow-600 dark:text-yellow-400">
+                          Pending Approval
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">—</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">{formatPKT(u.created_at, { hour: undefined, minute: undefined })}</td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-4 py-3 text-right flex items-center justify-end gap-2">
+                      {u.pro_request_status === 'pending' && (
+                        <button 
+                          onClick={() => {
+                            updateUser(u.id, { plan: 'pro', pro_request_status: 'none' })
+                              .then((updated) => setRows(rs => rs.map(r => r.id === updated.id ? updated : r)))
+                              .catch(() => alert("Failed to approve user"));
+                          }} 
+                          className="rounded-md p-1.5 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-500/10" 
+                          title="Approve Pro Request"
+                        >
+                          <CheckCircle className="h-4 w-4" />
+                        </button>
+                      )}
                       <button onClick={() => setOpen(u)} className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground" title="View user">
                         <Eye className="h-4 w-4" />
                       </button>

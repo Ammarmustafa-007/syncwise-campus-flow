@@ -129,6 +129,7 @@ export interface AdminUser {
   email: string;
   role: "admin" | "student" | "teacher";
   plan: "free" | "pro";
+  pro_request_status?: "none" | "pending";
   university_id: string;
   created_at: string;
 }
