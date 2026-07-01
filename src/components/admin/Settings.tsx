@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Plus, Building2, Layers, Loader2 } from "lucide-react";
-import { createDepartment, createUniversity, getDepartments, getUniversities, type Department, type University } from "@/lib/api";
+import { Check, Edit3, Plus, Building2, Layers, Loader2, X } from "lucide-react";
+import { createDepartment, createUniversity, getDepartments, getUniversities, updateDepartment, updateUniversity, type Department, type University } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
 export default function Settings() {
@@ -10,6 +10,10 @@ export default function Settings() {
   const [deps, setDeps] = useState<Department[]>([]);
   const [savingUni, setSavingUni] = useState(false);
   const [savingDep, setSavingDep] = useState(false);
+  const [editingUniId, setEditingUniId] = useState<string | null>(null);
+  const [editingDepId, setEditingDepId] = useState<string | null>(null);
+  const [updatingUniId, setUpdatingUniId] = useState<string | null>(null);
+  const [updatingDepId, setUpdatingDepId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [uniName, setUniName] = useState("");
@@ -18,6 +22,8 @@ export default function Settings() {
 
   const [depName, setDepName] = useState("");
   const [depCode, setDepCode] = useState("");
+  const [editUniForm, setEditUniForm] = useState({ name: "", city: "", country: "" });
+  const [editDepForm, setEditDepForm] = useState({ name: "", code: "" });
 
   useEffect(() => {
     getUniversities().then((u) => {
@@ -52,6 +58,49 @@ export default function Settings() {
       setDepName(""); setDepCode("");
     } catch (e) { setError((e as Error).message); }
     finally { setSavingDep(false); }
+  };
+
+  const startEditUni = (u: University) => {
+    setError(null);
+    setEditingDepId(null);
+    setEditingUniId(u.id);
+    setEditUniForm({ name: u.name, city: u.city || "", country: u.country || "" });
+  };
+
+  const startEditDep = (d: Department) => {
+    setError(null);
+    setEditingUniId(null);
+    setEditingDepId(d.id);
+    setEditDepForm({ name: d.name, code: d.code || "" });
+  };
+
+  const saveUni = async (id: string) => {
+    if (!editUniForm.name.trim()) { setError("University name is required."); return; }
+    setUpdatingUniId(id); setError(null);
+    try {
+      const updated = await updateUniversity(id, {
+        name: editUniForm.name.trim(),
+        city: editUniForm.city.trim(),
+        country: editUniForm.country.trim() || "Pakistan",
+      });
+      setUnis((prev) => prev.map((u) => u.id === id ? updated : u));
+      setEditingUniId(null);
+    } catch (e) { setError((e as Error).message); }
+    finally { setUpdatingUniId(null); }
+  };
+
+  const saveDep = async (id: string) => {
+    if (!editDepForm.name.trim() || !editDepForm.code.trim()) { setError("Department name and code are required."); return; }
+    setUpdatingDepId(id); setError(null);
+    try {
+      const updated = await updateDepartment(id, {
+        name: editDepForm.name.trim(),
+        code: editDepForm.code.trim().toUpperCase(),
+      });
+      setDeps((prev) => prev.map((d) => d.id === id ? updated : d));
+      setEditingDepId(null);
+    } catch (e) { setError((e as Error).message); }
+    finally { setUpdatingDepId(null); }
   };
 
   const inputCls = "w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/30";
@@ -97,11 +146,33 @@ export default function Settings() {
           <ul className="mt-5 space-y-1.5">
             {unis.map((u) => (
               <li key={u.id} className="flex items-center justify-between rounded-lg border bg-background px-3 py-2 text-sm">
-                <div>
-                  <p className="font-medium">{u.name}</p>
-                  <p className="text-xs text-muted-foreground">{u.city}, {u.country}</p>
-                </div>
-                <button className="text-xs font-medium text-primary hover:underline">Edit</button>
+                {editingUniId === u.id ? (
+                  <div className="flex w-full flex-col gap-2">
+                    <input className={inputCls} value={editUniForm.name} onChange={(e) => setEditUniForm((p) => ({ ...p, name: e.target.value }))} placeholder="University name" />
+                    <div className="grid grid-cols-2 gap-2">
+                      <input className={inputCls} value={editUniForm.city} onChange={(e) => setEditUniForm((p) => ({ ...p, city: e.target.value }))} placeholder="City" />
+                      <input className={inputCls} value={editUniForm.country} onChange={(e) => setEditUniForm((p) => ({ ...p, country: e.target.value }))} placeholder="Country" />
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <button onClick={() => setEditingUniId(null)} disabled={updatingUniId === u.id} className="inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium hover:bg-accent disabled:opacity-50">
+                        <X className="h-3 w-3" /> Cancel
+                      </button>
+                      <button onClick={() => saveUni(u.id)} disabled={updatingUniId === u.id} className="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1 text-xs font-semibold text-primary-foreground disabled:opacity-50">
+                        {updatingUniId === u.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />} Save
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div>
+                      <p className="font-medium">{u.name}</p>
+                      <p className="text-xs text-muted-foreground">{u.city}, {u.country}</p>
+                    </div>
+                    <button onClick={() => startEditUni(u)} className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+                      <Edit3 className="h-3 w-3" /> Edit
+                    </button>
+                  </>
+                )}
               </li>
             ))}
           </ul>
@@ -130,11 +201,30 @@ export default function Settings() {
             {deps.length === 0 && <li className="text-sm text-muted-foreground">No departments yet.</li>}
             {deps.map((d) => (
               <li key={d.id} className="flex items-center justify-between rounded-lg border bg-background px-3 py-2 text-sm">
-                <div>
-                  <p className="font-medium">{d.name}</p>
-                  <p className="text-xs text-muted-foreground">Code: {d.code}</p>
-                </div>
-                <button className="text-xs font-medium text-primary hover:underline">Edit</button>
+                {editingDepId === d.id ? (
+                  <div className="flex w-full flex-col gap-2">
+                    <input className={inputCls} value={editDepForm.name} onChange={(e) => setEditDepForm((p) => ({ ...p, name: e.target.value }))} placeholder="Department name" />
+                    <input className={inputCls} value={editDepForm.code} onChange={(e) => setEditDepForm((p) => ({ ...p, code: e.target.value.toUpperCase() }))} placeholder="Code" />
+                    <div className="flex justify-end gap-2">
+                      <button onClick={() => setEditingDepId(null)} disabled={updatingDepId === d.id} className="inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium hover:bg-accent disabled:opacity-50">
+                        <X className="h-3 w-3" /> Cancel
+                      </button>
+                      <button onClick={() => saveDep(d.id)} disabled={updatingDepId === d.id} className="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1 text-xs font-semibold text-primary-foreground disabled:opacity-50">
+                        {updatingDepId === d.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />} Save
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div>
+                      <p className="font-medium">{d.name}</p>
+                      <p className="text-xs text-muted-foreground">Code: {d.code}</p>
+                    </div>
+                    <button onClick={() => startEditDep(d)} className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+                      <Edit3 className="h-3 w-3" /> Edit
+                    </button>
+                  </>
+                )}
               </li>
             ))}
           </ul>

@@ -93,7 +93,7 @@ export interface UploadResultSuccess {
   slots_count: number;
   needs_review_count: number;
   sections_found: { name: string }[];
-  needs_review_slots?: any[];
+  needs_review_slots?: FlaggedSlot[];
   university_name: string;
   department_name: string;
   uploaded_at: string;
@@ -120,7 +120,38 @@ export interface VersionRow {
   university: { name: string };
   department: { name: string; code: string };
   sections_found: string[];
-  needs_review_slots?: any[];
+  needs_review_slots?: FlaggedSlot[];
+}
+
+export interface FlaggedSlot {
+  id: string;
+  version_id: string;
+  section: string | null;
+  day: string | null;
+  slot_number: number | null;
+  start_time: string | null;
+  end_time: string | null;
+  subject: string | null;
+  teacher: string | null;
+  room: string | null;
+  slot_type: "free" | "lecture" | "lab" | "extended" | string | null;
+  col_span: number | null;
+  needs_review: boolean;
+  raw_cell_text: string | null;
+  remaining_needs_review_count?: number;
+}
+
+export interface ReviewSlotPayload {
+  subject?: string | null;
+  section?: string | null;
+  teacher?: string | null;
+  room?: string | null;
+  day?: string | null;
+  start_time?: string | null;
+  end_time?: string | null;
+  slot_type?: string | null;
+  col_span?: number;
+  mark_reviewed?: boolean;
 }
 
 export interface AdminUser {
@@ -129,7 +160,7 @@ export interface AdminUser {
   email: string;
   role: "admin" | "student" | "teacher";
   plan: "free" | "pro";
-  pro_request_status?: "none" | "pending";
+  pro_request_status?: "none" | "pending" | "approved";
   university_id: string;
   created_at: string;
 }
@@ -161,6 +192,14 @@ export async function createUniversity(input: { name: string; city: string; coun
   });
 }
 
+// PATCH /api/admin/universities/:id
+export async function updateUniversity(id: string, patch: Partial<Pick<University, "name" | "city" | "country">>): Promise<University> {
+  return _realRequest<University>(`${API_BASE}/admin/universities/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+}
+
 // GET /api/admin/departments?university_id=X
 export async function getDepartments(university_id: string): Promise<Department[]> {
   return _realRequest<Department[]>(`${API_BASE}/admin/departments?university_id=${university_id}`);
@@ -171,6 +210,14 @@ export async function createDepartment(input: { name: string; code: string; univ
   return _realRequest<Department>(`${API_BASE}/admin/departments`, {
     method: "POST",
     body: JSON.stringify(input),
+  });
+}
+
+// PATCH /api/admin/departments/:id
+export async function updateDepartment(id: string, patch: Partial<Pick<Department, "name" | "code" | "university_id">>): Promise<Department> {
+  return _realRequest<Department>(`${API_BASE}/admin/departments/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
   });
 }
 
@@ -232,8 +279,16 @@ export async function getVersions(): Promise<VersionRow[]> {
 }
 
 // GET /api/admin/versions/:id/flagged
-export async function getFlaggedSlots(versionId: string): Promise<any[]> {
-  return _realRequest<any[]>(`${API_BASE}/admin/versions/${versionId}/flagged`);
+export async function getFlaggedSlots(versionId: string): Promise<FlaggedSlot[]> {
+  return _realRequest<FlaggedSlot[]>(`${API_BASE}/admin/versions/${versionId}/flagged`);
+}
+
+// PATCH /api/admin/slots/:id/review
+export async function reviewFlaggedSlot(slotId: string, payload: ReviewSlotPayload): Promise<FlaggedSlot> {
+  return _realRequest<FlaggedSlot>(`${API_BASE}/admin/slots/${slotId}/review`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
 }
 
 // GET /api/admin/versions/:id/sections
@@ -268,7 +323,7 @@ export async function getUserSections(id: string): Promise<UserSections> {
 }
 
 // PATCH /api/admin/users/:id  (role/plan changes)
-export async function updateUser(id: string, patch: Partial<Pick<AdminUser, "role" | "plan">>): Promise<AdminUser> {
+export async function updateUser(id: string, patch: Partial<Pick<AdminUser, "role" | "plan" | "pro_request_status">>): Promise<AdminUser> {
   return _realRequest<AdminUser>(`${API_BASE}/admin/users/${id}`, {
     method: "PATCH",
     body: JSON.stringify(patch),

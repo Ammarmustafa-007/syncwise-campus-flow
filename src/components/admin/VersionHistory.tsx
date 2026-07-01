@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { Eye, History, X, CheckCircle2, FileText, AlertTriangle, Trash2 } from "lucide-react";
-import { getVersions, setLatestVersion, getVersionSections, deleteVersion, getFlaggedSlots, type VersionRow } from "@/lib/api";
+import { getVersions, setLatestVersion, getVersionSections, deleteVersion, getFlaggedSlots, type FlaggedSlot, type VersionRow } from "@/lib/api";
 import SkeletonLoader from "./SkeletonLoader";
 import { formatPKT } from "@/lib/format";
+import FlaggedSlotReviewList from "./FlaggedSlotReviewList";
 
 function groupSections(sections: string[]) {
   const groups: Record<string, string[]> = {};
@@ -42,8 +43,8 @@ export default function VersionHistory() {
   const [deptFilter, setDeptFilter] = useState("");
   const [semSearch, setSemSearch] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
-  const [flaggedSlots, setFlaggedSlots] = useState<any[]>([]);
-  const [flaggedSlotsCache, setFlaggedSlotsCache] = useState<Record<string, any[]>>({});
+  const [flaggedSlots, setFlaggedSlots] = useState<FlaggedSlot[]>([]);
+  const [flaggedSlotsCache, setFlaggedSlotsCache] = useState<Record<string, FlaggedSlot[]>>({});
 
   const load = () => {
     setLoading(true);
@@ -117,6 +118,20 @@ export default function VersionHistory() {
     } finally {
       setBusy(null);
     }
+  };
+
+  const handleSlotReviewed = (slot: FlaggedSlot) => {
+    if (!open) return;
+    const versionId = slot.version_id || open.id;
+    const remainingCount = slot.remaining_needs_review_count ?? Math.max(0, open.needs_review_count - 1);
+
+    setFlaggedSlots((prev) => prev.filter((item) => item.id !== slot.id));
+    setFlaggedSlotsCache((prev) => ({
+      ...prev,
+      [versionId]: (prev[versionId] || flaggedSlots).filter((item) => item.id !== slot.id),
+    }));
+    setOpen((prev) => prev ? { ...prev, needs_review_count: remainingCount } : prev);
+    setRows((prev) => prev.map((row) => row.id === versionId ? { ...row, needs_review_count: remainingCount } : row));
   };
 
   return (
@@ -216,31 +231,12 @@ export default function VersionHistory() {
               </Row>
             </dl>
             {open.needs_review_count > 0 && (
-              <div className="mt-4 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-300">
-                <div className="flex items-center gap-2 mb-3 font-semibold">
-                  <AlertTriangle className="h-4 w-4" />
-                  {open.needs_review_count} slots flagged for review
-                </div>
-                <div className="space-y-2">
-                  {flaggedSlots.length === 0 ? (
-                    <span className="text-xs text-amber-300/70 italic">Loading slots...</span>
-                  ) : (
-                    flaggedSlots.map((slot: any, i: number) => (
-                      <div key={i} className="bg-black/20 p-3 rounded border border-amber-500/20 text-xs flex flex-col gap-1">
-                        <div className="flex justify-between items-start gap-4">
-                          <span className="font-semibold text-amber-200">{slot.subject || "Unknown Subject"}</span>
-                          <span className="shrink-0 text-amber-400/80">{slot.day} {slot.start_time}-{slot.end_time}</span>
-                        </div>
-                        <div className="text-amber-200/70">
-                          Section: {slot.section || "?"} | Teacher: {slot.teacher || "?"} | Room: {slot.room || "?"}
-                        </div>
-                        <div className="mt-1 font-mono text-[10px] bg-black/40 p-1.5 rounded text-amber-100/60 overflow-x-auto whitespace-pre">
-                          {slot.raw_cell_text}
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
+              <div className="mt-4">
+                <FlaggedSlotReviewList
+                  count={open.needs_review_count}
+                  slots={flaggedSlots}
+                  onReviewed={handleSlotReviewed}
+                />
               </div>
             )}
             <div className="mt-5">

@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Upload, FileText, X, CheckCircle2, AlertTriangle, Info, Loader2 } from "lucide-react";
-import { getDepartments, getUniversities, uploadTimetable, type Department, type University, type UploadResult } from "@/lib/api";
+import { Upload, FileText, X, CheckCircle2, Info, Loader2 } from "lucide-react";
+import { getDepartments, getUniversities, uploadTimetable, type Department, type FlaggedSlot, type University, type UploadResult } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { formatBytes, formatPKT } from "@/lib/format";
 import { CustomSelect } from "@/components/ui/CustomSelect";
+import FlaggedSlotReviewList from "./FlaggedSlotReviewList";
 
 export default function UploadTimetable() {
   const { user } = useAuth();
@@ -85,6 +86,18 @@ export default function UploadTimetable() {
   const selectedUni = useMemo(() => unis.find((u) => u.id === universityId), [unis, universityId]);
   const selectedDep = useMemo(() => deps.find((d) => d.id === departmentId), [deps, departmentId]);
 
+  const handleSlotReviewed = (slot: FlaggedSlot) => {
+    setResult((prev) => {
+      if (!prev || prev.status !== "success") return prev;
+      const remainingSlots = (prev.needs_review_slots || []).filter((item) => item.id !== slot.id);
+      return {
+        ...prev,
+        needs_review_slots: remainingSlots,
+        needs_review_count: slot.remaining_needs_review_count ?? remainingSlots.length,
+      };
+    });
+  };
+
   return (
     <div className="max-w-4xl space-y-6">
       <header>
@@ -95,7 +108,7 @@ export default function UploadTimetable() {
       </header>
 
       {/* Step 1 */}
-      <section className="rounded-2xl border bg-card p-6 shadow-card animate-fade-in-up">
+      <section className="relative z-10 rounded-2xl border bg-card p-6 shadow-card animate-fade-in-up">
         <div className="mb-4 flex items-center gap-3">
           <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">1</div>
           <h2 className="font-semibold">Select university and department</h2>
@@ -251,27 +264,12 @@ export default function UploadTimetable() {
             </div>
           </div>
           {successResult.needs_review_count > 0 && (
-            <div className="m-5 mt-0 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-300">
-              <div className="flex items-center gap-2 mb-3 font-semibold">
-                <AlertTriangle className="h-4 w-4" />
-                {successResult.needs_review_count} slots flagged for review
-              </div>
-              <div className="max-h-60 overflow-y-auto space-y-2 pr-2">
-                {successResult.needs_review_slots?.map((slot: any, i: number) => (
-                  <div key={i} className="bg-black/20 p-3 rounded border border-amber-500/20 text-xs flex flex-col gap-1">
-                    <div className="flex justify-between items-start gap-4">
-                      <span className="font-semibold text-amber-200">{slot.subject || "Unknown Subject"}</span>
-                      <span className="shrink-0 text-amber-400/80">{slot.day} {slot.start_time}-{slot.end_time}</span>
-                    </div>
-                    <div className="text-amber-200/70">
-                      Section: {slot.section || "?"} | Teacher: {slot.teacher || "?"} | Room: {slot.room || "?"}
-                    </div>
-                    <div className="mt-1 font-mono text-[10px] bg-black/40 p-1.5 rounded text-amber-100/60 overflow-x-auto whitespace-pre">
-                      {slot.raw_cell_text}
-                    </div>
-                  </div>
-                ))}
-              </div>
+            <div className="m-5 mt-0">
+              <FlaggedSlotReviewList
+                count={successResult.needs_review_count}
+                slots={successResult.needs_review_slots || []}
+                onReviewed={handleSlotReviewed}
+              />
             </div>
           )}
         </section>
