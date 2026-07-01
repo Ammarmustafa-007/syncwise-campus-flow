@@ -48,26 +48,23 @@ export function CustomSelect({ value, onChange, options, placeholder, disabled, 
       </button>
 
       {isOpen && !disabled && (
-        <div
-          className="absolute z-50 w-full mt-2 bg-background border border-border/50 rounded-xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] overflow-hidden ring-1 ring-black/5 animate-[fade-in_0.2s_ease-out]"
-        >
+        <div className="absolute z-50 w-full mt-2 bg-background border border-border/50 rounded-xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] overflow-hidden ring-1 ring-black/5">
           <div className="max-h-60 overflow-y-auto custom-scrollbar p-1.5">
             {!options || options.length === 0 ? (
               <div className="px-4 py-3 text-sm text-muted-foreground text-center">No options available</div>
             ) : (
-              options.map((option, idx) => (
+              options.map((option) => (
                 <button
                   key={option.value}
                   type="button"
-                  style={{ animationDelay: `${idx * 0.02}s` }}
                   onClick={() => {
                     onChange(String(option.value));
                     setIsOpen(false);
                   }}
-                  className={`w-full text-left px-3 py-2.5 text-sm rounded-lg flex items-center justify-between transition-all duration-200 animate-[slide-in-left_0.3s_ease-out_both] ${
+                  className={`w-full text-left px-3 py-2.5 text-sm rounded-lg flex items-center justify-between transition-colors duration-150 ${
                     String(value) === String(option.value)
                       ? 'bg-gradient-to-r from-primary/20 to-primary/5 text-primary font-bold shadow-inner'
-                      : 'text-foreground/90 hover:bg-muted/80 hover:pl-4'
+                      : 'text-foreground/90 hover:bg-muted/80'
                   }`}
                 >
                   <span className="truncate">{option.label}</span>
@@ -78,17 +75,6 @@ export function CustomSelect({ value, onChange, options, placeholder, disabled, 
           </div>
         </div>
       )}
-      
-      <style>{`
-        @keyframes fade-in {
-          from { opacity: 0; transform: translateY(-10px) scale(0.98); filter: blur(4px); }
-          to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
-        }
-        @keyframes slide-in-left {
-          from { opacity: 0; transform: translateX(-10px); }
-          to { opacity: 1; transform: translateX(0); }
-        }
-      `}</style>
     </div>
   );
 }
